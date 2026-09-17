@@ -12,11 +12,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS avanzados
+# Estilos CSS avanzados para un diseño totalmente cohesionado con el tema del logo
 st.markdown("""
     <style>
     [data-testid="stSidebar"] {
         background-color: #0f172a;
+        padding-top: 1rem;
     }
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
         color: #f8fafc !important;
@@ -84,10 +85,9 @@ def inicializar_base_datos():
         )''')
         conn.commit()
         
-    # 2. Verificar y corregir tabla creditos de forma estricta
+    # 2. Verificar y corregir tabla creditos
     cursor.execute("PRAGMA table_info(creditos)")
     cols_c = [col[1] for col in cursor.fetchall()]
-    # Si falta la columna 'total' o la estructura no tiene 5 columnas, la reconstruimos obligatoriamente
     if "total" not in cols_c or len(cols_c) != 5:
         cursor.execute("DROP TABLE IF EXISTS creditos")
         cursor.execute('''CREATE TABLE creditos (
@@ -99,17 +99,25 @@ def inicializar_base_datos():
 
 inicializar_base_datos()
 
-# Sidebar con Logo y Menú
-st.sidebar.markdown("<h1 style='text-align: center; color: #38bdf8; font-size: 2rem;'>⚡ MEGA TRAM</h1>", unsafe_allow_html=True)
-st.sidebar.markdown("<p style='text-align: center; color: #94a3b8; font-size: 0.9rem;'>Sistema de Gestión Comercial</p>", unsafe_allow_html=True)
+# ---------------------------------------------------------
+# SIDEBAR: Logo Encima de las Letras
+# ---------------------------------------------------------
+logo_paths = ["logo.png", "p-jpg-Google-Drive-09-16-2026_10_06_PM_2.png", "p-jpg-Google-Drive-09-16-2026_10_06_PM.png"]
+logo_encontrado = False
+for lp in logo_paths:
+    if os.path.exists(lp):
+        st.sidebar.image(lp, use_container_width=True)
+        logo_encontrado = True
+        break
 
-if os.path.exists("logo.png"):
-    st.sidebar.image("logo.png", use_container_width=True)
-else:
-    st.sidebar.warning("⚠️ Sube tu imagen como 'logo.png' en el directorio del proyecto.")
+if not logo_encontrado:
+    st.sidebar.warning("⚠️ Sube tu logo como 'logo.png' en el directorio del proyecto.")
+
+st.sidebar.markdown("<h1 style='text-align: center; color: #38bdf8; font-size: 1.8rem; margin-top: 0px;'>⚡ MEGA TRAM</h1>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='text-align: center; color: #94a3b8; font-size: 0.85rem; margin-bottom: 20px;'>Sistema de Gestión Comercial</p>", unsafe_allow_html=True)
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 1.2rem; font-weight: bold; color: #f8fafc;'>Menú Principal</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size: 1.1rem; font-weight: bold; color: #f8fafc;'>Menú Principal</p>", unsafe_allow_html=True)
 
 menu = st.sidebar.radio("", [
     "🛒 Ventas (POS)",
@@ -203,11 +211,30 @@ if menu == "🛒 Ventas (POS)":
                     st.rerun()
 
 # ---------------------------------------------------------
-# 2. INVENTARIO
+# 2. INVENTARIO (Incluyendo carga de CSV)
 # ---------------------------------------------------------
 elif menu == "📦 Inventario":
     st.title("📦 Gestión de Inventario")
     
+    # Sección para Cargar CSV
+    with st.expander("📂 Importar Inventario desde Archivo CSV"):
+        archivo_csv = st.file_uploader("Sube tu archivo CSV con columnas: codigo, descripcion, cantidad, formato, costo_compra, precio_venta", type=["csv"])
+        if archivo_csv is not None:
+            try:
+                df_csv = pd.read_csv(archivo_csv)
+                st.write("Vista previa de los datos subidos:", df_csv.head())
+                if st.button("📥 Guardar / Reemplazar Inventario con CSV"):
+                    conn = sqlite3.connect(DB_NAME)
+                    for _, row in df_csv.iterrows():
+                        conn.execute('INSERT OR REPLACE INTO productos VALUES (?, ?, ?, ?, ?, ?)', 
+                                     (str(row['codigo']), str(row['descripcion']), float(row['cantidad']), str(row['formato']), float(row['costo_compra']), float(row['precio_venta'])))
+                    conn.commit()
+                    conn.close()
+                    st.success("✅ ¡Inventario importado correctamente desde el CSV!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error al procesar el archivo CSV: {e}")
+
     df_inv = consultar_sql("SELECT * FROM productos")
     total_refs = len(df_inv)
     costo_inv = (df_inv['cantidad'] * df_inv['costo_compra']).sum() if not df_inv.empty else 0.0
@@ -218,7 +245,7 @@ elif menu == "📦 Inventario":
     
     st.markdown("---")
     
-    with st.expander("➕ Crear Nuevo Producto"):
+    with st.expander("➕ Crear Nuevo Producto Individual"):
         with st.form("form_crear_prod"):
             cp1, cp2 = st.columns(2)
             with cp1:
