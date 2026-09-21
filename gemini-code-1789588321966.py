@@ -55,7 +55,7 @@ st.markdown("""
         transition: all 0.3s ease;
     }
     .stButton>button:hover, .stFormSubmitButton>button:hover {
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+        background: linear-gradient(135deg, #2563eb 100%, #1d4ed8 100%) !important;
         box-shadow: 0 6px 16px rgba(37, 99, 235, 0.5);
         transform: translateY(-1px);
     }
@@ -93,9 +93,26 @@ def inicializar_base_datos():
     ejecutar_sql('''CREATE TABLE IF NOT EXISTS empleados (
         id_empleado TEXT PRIMARY KEY, nombre TEXT, cargo TEXT, telefono TEXT, ci TEXT
     )''')
+    ejecutar_sql('''CREATE TABLE IF NOT EXISTS usuarios (
+        usuario TEXT PRIMARY KEY, password TEXT, rol TEXT, nombre TEXT
+    )''')
+    ejecutar_sql('''CREATE TABLE IF NOT EXISTS pedidos_clientes (
+        id_pedido TEXT PRIMARY KEY, cliente TEXT, fecha TEXT, detalle TEXT, total REAL, estado TEXT
+    )''')
     
+    # Insertar usuarios por defecto si no existen
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM usuarios")
+    if cursor.fetchone()[0] == 0:
+        usuarios_default = [
+            ("admin", "admin123", "Administrador", "Gerente Principal"),
+            ("empleado", "emp123", "Empleado", "Personal de Ventas"),
+            ("cliente1", "cli123", "Cliente", "Juan Cliente")
+        ]
+        cursor.executemany("INSERT INTO usuarios VALUES (?, ?, ?, ?)", usuarios_default)
+        conn.commit()
+    
     cursor.execute("PRAGMA table_info(ventas)")
     cols_v = [col[1] for col in cursor.fetchall()]
     if len(cols_v) != 10:
@@ -119,7 +136,53 @@ def inicializar_base_datos():
 inicializar_base_datos()
 
 # ---------------------------------------------------------
-# SIDEBAR: Logo, Selector de Roles y Menú Dinámico
+# CONTROL DE SESIÓN Y LOGIN
+# ---------------------------------------------------------
+if 'autenticado' not in st.session_state:
+    st.session_state['autenticado'] = False
+    st.session_state['usuario'] = ""
+    st.session_state['rol'] = ""
+    st.session_state['nombre_completo'] = ""
+
+if not st.session_state['autenticado']:
+    st.markdown("<h1 style='text-align: center; color: #0f172a;'>⚡ MEGA TRAM - Sistema Comercial</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #64748b;'>Control de Acceso e Inicio de Sesión</h3>", unsafe_allow_html=True)
+    
+    col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
+    with col_l2:
+        st.info("💡 **Credenciales de prueba:**\n- Admin: `admin` / `admin123`\n- Empleado: `empleado` / `emp123`\n- Cliente: `cliente1` / `cli123`")
+        
+        with st.form("form_login"):
+            usuario_input = st.text_input("Usuario")
+            password_input = st.text_input("Contraseña", type="password")
+            
+            b_ingresar = st.form_submit_button("🔐 Iniciar Sesión", use_container_width=True)
+            
+            if b_ingresar:
+                df_u = consultar_sql("SELECT * FROM usuarios WHERE usuario = ? AND password = ?", (usuario_input, password_input))
+                if not df_u.empty:
+                    st.session_state['autenticado'] = True
+                    st.session_state['usuario'] = df_u.iloc[0]['usuario']
+                    st.session_state['rol'] = df_u.iloc[0]['rol']
+                    st.session_state['nombre_completo'] = df_u.iloc[0]['nombre']
+                    st.success("✅ ¡Acceso exitoso!")
+                    st.rerun()
+                else:
+                    st.error("❌ Usuario o contraseña incorrectos.")
+                    
+        st.markdown("---")
+        st.markdown("<h4 style='text-align: center;'>¿Eres cliente y no tienes cuenta?</h4>", unsafe_allow_html=True)
+        if st.button("🛒 Entrar como Cliente sin cuenta (Catálogo Invitado)", use_container_width=True):
+            st.session_state['autenticado'] = True
+            st.session_state['usuario'] = "invitado"
+            st.session_state['rol'] = "ClienteInvitado"
+            st.session_state['nombre_completo'] = "Cliente Invitado"
+            st.rerun()
+            
+    st.stop() # Detiene la ejecución hasta que inicie sesión
+
+# ---------------------------------------------------------
+# SIDEBAR: Logo, Información de Sesión y Menú Dinámico
 # ---------------------------------------------------------
 logo_paths = ["logo.png", "p-jpg-Google-Drive-09-16-2026_10_06_PM_2.png", "p-jpg-Google-Drive-09-16-2026_10_06_PM.png"]
 logo_encontrado = False
@@ -133,16 +196,21 @@ if not logo_encontrado:
     st.sidebar.warning("⚠️ Sube tu logo como 'logo.png' en el directorio del proyecto.")
 
 st.sidebar.markdown("<h1 style='text-align: center; color: #38bdf8; font-size: 1.8rem; margin-top: 5px;'>⚡ MEGA TRAM</h1>", unsafe_allow_html=True)
-st.sidebar.markdown("<p style='text-align: center; color: #94a3b8; font-size: 0.85rem; margin-bottom: 20px;'>Sistema de Gestión Comercial</p>", unsafe_allow_html=True)
+st.sidebar.markdown(f"<p style='text-align: center; color: #94a3b8; font-size: 0.85rem;'>Sesión: <b>{st.session_state['nombre_completo']}</b><br>Perfil: <i>{st.session_state['rol']}</i></p>", unsafe_allow_html=True)
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("<p style='font-size: 1.1rem; font-weight: bold; color: #f8fafc;'>🔐 Control de Acceso (Rol)</p>", unsafe_allow_html=True)
-rol_usuario = st.sidebar.selectbox("Seleccionar Perfil:", ["Administrador", "Empleado", "Cliente"])
+if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
+    st.session_state['autenticado'] = False
+    st.session_state['usuario'] = ""
+    st.session_state['rol'] = ""
+    st.session_state['nombre_completo'] = ""
+    st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("<p style='font-size: 1.1rem; font-weight: bold; color: #f8fafc;'>Menú Principal</p>", unsafe_allow_html=True)
 
-# Menú dinámico basado estrictamente en el rol seleccionado
+rol_usuario = st.session_state['rol']
+
+# Selección de Menú según el Rol
 if rol_usuario == "Administrador":
     menu = st.sidebar.radio("", [
         "🛒 Ventas (POS)",
@@ -157,8 +225,13 @@ elif rol_usuario == "Empleado":
         "🛒 Ventas (POS)",
         "📦 Inventario (Consulta)"
     ], label_visibility="collapsed")
-else: # Cliente
-    menu = "🛒 Catálogo Virtual (Cliente)"
+elif rol_usuario == "Cliente":
+    menu = st.sidebar.radio("", [
+        "🛒 Catálogo Virtual",
+        "🛍️ Mis Pedidos Realizados"
+    ], label_visibility="collapsed")
+else: # ClienteInvitado
+    menu = "🛒 Catálogo Virtual"
 
 # ---------------------------------------------------------
 # 1. PUNTO DE VENTA (POS) - Administrador y Empleado
@@ -225,7 +298,6 @@ if menu == "🛒 Ventas (POS)":
             st.metric("Ventas Hoy", f"Bs. {df_hoy['total'].sum() if not df_hoy.empty else 0.0:,.2f}")
             st.metric("Transacciones", f"{len(df_hoy)}")
             
-            # Solo Administrador puede eliminar ventas
             if rol_usuario == "Administrador":
                 st.markdown("---")
                 st.subheader("Eliminar Venta")
@@ -239,7 +311,7 @@ if menu == "🛒 Ventas (POS)":
                         st.rerun()
 
 # ---------------------------------------------------------
-# 2. INVENTARIO (Administrador: Edición y Carga/Descarga | Empleado: Solo Ver sin Precios)
+# 2. INVENTARIO (Administrador)
 # ---------------------------------------------------------
 elif menu == "📦 Inventario":
     st.title("📦 Gestión de Inventario (Administrador)")
@@ -479,12 +551,15 @@ elif menu == "📒 Créditos":
         st.info("No hay registros de créditos.")
 
 # ---------------------------------------------------------
-# 7. CATÁLOGO VIRTUAL (Perfil Cliente)
+# 7. CATÁLOGO VIRTUAL Y PEDIDOS (Clientes / Invitados)
 # ---------------------------------------------------------
-elif menu == "🛒 Catálogo Virtual (Cliente)":
+elif menu == "🛒 Catálogo Virtual":
     st.title("🛒 Catálogo Virtual - MEGA TRAM")
-    st.markdown("Bienvenido a nuestro catálogo en línea. Aquí puedes consultar los productos disponibles y sus precios de venta.")
-    
+    if rol_usuario == "Cliente":
+        st.success(f"👋 ¡Hola, {st.session_state['nombre_completo']}! Puedes realizar pedidos directamente desde el catálogo.")
+    else:
+        st.info("🌐 Estás navegando como Invitado. Inicia sesión con tu cuenta de cliente si deseas registrar y guardar tus pedidos.")
+        
     df_client_inv = consultar_sql("SELECT descripcion, formato, precio_venta, cantidad FROM productos")
     
     busq_c = st.text_input("🔍 Buscar productos en el catálogo...")
@@ -498,11 +573,36 @@ elif menu == "🛒 Catálogo Virtual (Cliente)":
         for idx, row in df_client_inv.reset_index().iterrows():
             with cols[idx % 3]:
                 disponibilidad = "🟢 Disponible" if row['cantidad'] > 0 else "🔴 Agotado"
-                st.container(border=True).markdown(f"""
-                <div style="text-align: center;">
-                    <h3>{row['descripcion']}</h3>
-                    <p style="color: gray; font-size: 13px;">Unidad: {row['formato']}</p>
-                    <h2 style="color: #2563eb;">Bs. {row['precio_venta']:,.2f}</h2>
-                    <p style="font-size: 12px; font-weight: bold;">{disponibilidad}</p>
-                </div>
-                """, unsafe_allow_html=True)
+                
+                with st.container(border=True):
+                    st.markdown(f"""
+                    <div style="text-align: center;">
+                        <h3>{row['descripcion']}</h3>
+                        <p style="color: gray; font-size: 13px;">Unidad: {row['formato']}</p>
+                        <h2 style="color: #2563eb;">Bs. {row['precio_venta']:,.2f}</h2>
+                        <p style="font-size: 12px; font-weight: bold;">{disponibilidad}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Si es un cliente con sesión iniciada, permitirle hacer un pedido rápido
+                    if rol_usuario == "Cliente":
+                        cant_pedir = st.number_input(f"Cantidad a pedir ({row['descripcion']})", min_value=1.0, value=1.0, key=f"cant_{idx}")
+                        if st.button(f"🛍️ Solicitar Pedido", key=f"btn_ped_{idx}", use_container_width=True):
+                            id_p = f"PED-{int(datetime.datetime.now().timestamp())}-{idx}"
+                            fecha_p = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            detalle_p = f"{cant_pedir} x {row['descripcion']}"
+                            total_p = cant_pedir * row['precio_venta']
+                            
+                            ejecutar_sql('INSERT INTO pedidos_clientes VALUES (?, ?, ?, ?, ?, ?)',
+                                         (id_p, st.session_state['nombre_completo'], fecha_p, detalle_p, total_p, "Solicitado"))
+                            st.success(f"✅ ¡Pedido registrado con éxito! ID: {id_p}")
+
+elif menu == "🛍️ Mis Pedidos Realizados":
+    st.title("🛍️ Historial de Mis Pedidos")
+    st.info(f"Mostrando los pedidos registrados por: **{st.session_state['nombre_completo']}**")
+    
+    df_pedidos = consultar_sql("SELECT * FROM pedidos_clientes WHERE cliente = ?", (st.session_state['nombre_completo'],))
+    if df_pedidos.empty:
+        st.info("Aún no has realizado ningún pedido. ¡Explora el catálogo virtual y solicita tus productos!")
+    else:
+        st.dataframe(df_pedidos, use_container_width=True)
