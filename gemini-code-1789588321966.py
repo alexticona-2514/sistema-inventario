@@ -12,10 +12,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS avanzados y modernos para botones, contenedores y diseño general
+# Estilos CSS avanzados y modernos
 st.markdown("""
     <style>
-    /* Estilo general de la barra lateral */
     [data-testid="stSidebar"] {
         background-color: #0b132b;
         padding-top: 1rem;
@@ -24,8 +23,6 @@ st.markdown("""
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
         color: #ffffff !important;
     }
-    
-    /* Radio buttons del menú con diseño de botones modernos */
     .stRadio label {
         font-size: 1.1rem !important;
         font-weight: 600 !important;
@@ -38,8 +35,6 @@ st.markdown("""
         background-color: #1d2d44;
         color: #38bdf8 !important;
     }
-
-    /* Tarjetas de Métricas estilizadas */
     .stMetric {
         background: linear-gradient(135deg, #1b263b 0%, #0d1b2a 100%) !important;
         padding: 22px;
@@ -49,8 +44,6 @@ st.markdown("""
     }
     .stMetric label { color: #8d99ae !important; font-weight: 600 !important; font-size: 0.95rem !important; }
     .stMetric div[data-testid="stMetricValue"] { color: #e0fbfc !important; font-size: 2rem !important; font-weight: bold; }
-
-    /* Botones de Streamlit personalizados */
     .stButton>button, .stFormSubmitButton>button {
         background: linear-gradient(135deg, #3a86ff 0%, #2563eb 100%) !important;
         color: white !important;
@@ -66,19 +59,10 @@ st.markdown("""
         box-shadow: 0 6px 16px rgba(37, 99, 235, 0.5);
         transform: translateY(-1px);
     }
-
-    /* Encabezados generales */
     h1, h2, h3 {
         color: #0f172a;
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         font-weight: 700;
-    }
-    
-    /* Contenedores de expansores y formularios */
-    .streamlit-expanderHeader {
-        background-color: #f8fafc;
-        border-radius: 10px;
-        border: 1px solid #e2e8f0;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -112,7 +96,6 @@ def inicializar_base_datos():
     
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    
     cursor.execute("PRAGMA table_info(ventas)")
     cols_v = [col[1] for col in cursor.fetchall()]
     if len(cols_v) != 10:
@@ -131,14 +114,11 @@ def inicializar_base_datos():
             id_credito TEXT PRIMARY KEY, cliente TEXT, fecha TEXT, total REAL, estado TEXT
         )''')
         conn.commit()
-        
     conn.close()
 
 inicializar_base_datos()
 
-# ---------------------------------------------------------
-# SIDEBAR: Logo Encima de las Letras
-# ---------------------------------------------------------
+# SIDEBAR: Logo y Menú
 logo_paths = ["logo.png", "p-jpg-Google-Drive-09-16-2026_10_06_PM_2.png", "p-jpg-Google-Drive-09-16-2026_10_06_PM.png"]
 logo_encontrado = False
 for lp in logo_paths:
@@ -170,7 +150,6 @@ menu = st.sidebar.radio("", [
 # ---------------------------------------------------------
 if menu == "🛒 Ventas (POS)":
     st.title("🛒 Punto de Venta")
-    
     df_inv = consultar_sql("SELECT * FROM productos")
     df_emp = consultar_sql("SELECT * FROM empleados")
     
@@ -178,7 +157,6 @@ if menu == "🛒 Ventas (POS)":
         st.warning("⚠️ No hay productos registrados. Ve al módulo de Inventario para agregar.")
     else:
         col1, col2 = st.columns([2, 1])
-        
         with col1:
             st.subheader("Registrar Venta")
             empleados_lista = df_emp['nombre'].tolist() if not df_emp.empty else ["General"]
@@ -200,7 +178,6 @@ if menu == "🛒 Ventas (POS)":
                 with c2: precio_vender = st.number_input("Precio Unitario (Bs.)", value=float(row_prod['precio_venta']))
                 
                 metodo = st.selectbox("Método de Pago", ["Efectivo", "QR / Transferencia", "Tarjeta", "Crédito / Fiado"])
-                
                 subtotal = cant_vender * precio_vender
                 st.markdown(f"### Total a Pagar: <span style='color: #2563eb;'>Bs. {subtotal:,.2f}</span>", unsafe_allow_html=True)
                 
@@ -214,17 +191,13 @@ if menu == "🛒 Ventas (POS)":
                     else:
                         id_v = f"V-{int(datetime.datetime.now().timestamp())}"
                         fecha_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        
                         ejecutar_sql('INSERT INTO ventas VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', 
                                      (id_v, fecha_str, emp_vende, cliente_nombre, str(row_prod['codigo']), row_prod['descripcion'], cant_vender, precio_vender, subtotal, metodo))
-                        
                         nuevo_stock = row_prod['cantidad'] - cant_vender
                         ejecutar_sql('UPDATE productos SET cantidad = ? WHERE codigo = ?', (nuevo_stock, str(row_prod['codigo'])))
-                        
                         if metodo == "Crédito / Fiado":
                             ejecutar_sql('INSERT OR REPLACE INTO creditos VALUES (?, ?, ?, ?, ?)', 
                                          (id_v, cliente_nombre, fecha_str, subtotal, "Pendiente"))
-                            
                         st.success(f"✅ Venta completada con éxito. ID: {id_v}")
                         st.rerun()
                 if btn_cancelar:
@@ -248,20 +221,17 @@ if menu == "🛒 Ventas (POS)":
                     st.rerun()
 
 # ---------------------------------------------------------
-# 2. INVENTARIO (Carga CSV + Descarga CSV + Edición)
+# 2. INVENTARIO (Con Carga CSV Inteligente y Descarga)
 # ---------------------------------------------------------
 elif menu == "📦 Inventario":
     st.title("📦 Gestión de Inventario")
-    
     df_inv = consultar_sql("SELECT * FROM productos")
     
-    # Sección para Cargar e Importar CSV
     with st.expander("📂 Importar o Exportar Inventario Masivo"):
         col_sub, col_desc = st.columns(2)
-        
         with col_sub:
             st.markdown("#### Subir Archivo CSV")
-            archivo_csv = st.file_uploader("Sube tu CSV (codigo, descripcion, cantidad, formato, costo_compra, precio_venta)", type=["csv"])
+            archivo_csv = st.file_uploader("Sube tu archivo CSV", type=["csv"])
             if archivo_csv is not None:
                 try:
                     df_csv = pd.read_csv(archivo_csv)
@@ -269,8 +239,16 @@ elif menu == "📦 Inventario":
                     if st.button("📥 Guardar / Reemplazar con CSV"):
                         conn = sqlite3.connect(DB_NAME)
                         for _, row in df_csv.iterrows():
+                            # Detección flexible de columnas para evitar errores
+                            c_codigo = str(row.get('codigo', row.get('Código', row.iloc[0])))
+                            c_desc = str(row.get('descripcion', row.get('Descripción', row.get('Nombre', row.iloc[1]))))
+                            c_cant = float(row.get('cantidad', row.get('Cantidad', row.iloc[2] if len(row) > 2 else 1.0)))
+                            c_formato = str(row.get('formato', row.get('Formato', row.get('Unidad', row.iloc[3] if len(row) > 3 else 'Pza'))))
+                            c_costo = float(row.get('costo_compra', row.get('Costo', row.get('costo', row.iloc[4] if len(row) > 4 else 0.0))))
+                            c_precio = float(row.get('precio_venta', row.get('Precio', row.get('precio', row.iloc[5] if len(row) > 5 else 0.0))))
+
                             conn.execute('INSERT OR REPLACE INTO productos VALUES (?, ?, ?, ?, ?, ?)', 
-                                         (str(row['codigo']), str(row['descripcion']), float(row['cantidad']), str(row['formato']), float(row['costo_compra']), float(row['precio_venta'])))
+                                         (c_codigo, c_desc, c_cant, c_formato, c_costo, c_precio))
                         conn.commit()
                         conn.close()
                         st.success("✅ ¡Inventario importado correctamente!")
@@ -280,7 +258,7 @@ elif menu == "📦 Inventario":
                     
         with col_desc:
             st.markdown("#### Descargar Inventario Actual")
-            st.write("Descarga una copia de seguridad de tu inventario en formato CSV para editarlo o respaldarlo.")
+            st.write("Descarga una copia de tu inventario en CSV.")
             if not df_inv.empty:
                 csv_data = df_inv.to_csv(index=False).encode('utf-8')
                 st.download_button(
@@ -301,7 +279,6 @@ elif menu == "📦 Inventario":
     with m2: st.metric("Costo Total Inventario", f"Bs. {costo_inv:,.2f}")
     
     st.markdown("---")
-    
     with st.expander("➕ Crear Nuevo Producto Individual"):
         with st.form("form_crear_prod"):
             cp1, cp2 = st.columns(2)
@@ -358,7 +335,6 @@ elif menu == "📦 Inventario":
 # ---------------------------------------------------------
 elif menu == "👥 Empleados":
     st.title("👥 Gestión de Empleados")
-    
     with st.form("form_empleado"):
         ep1, ep2 = st.columns(2)
         with ep1:
@@ -447,12 +423,10 @@ elif menu == "📊 Estadísticas":
 # ---------------------------------------------------------
 elif menu == "📒 Créditos":
     st.title("📒 Cuentas por Cobrar (Créditos / Fiados)")
-    
     df_cred = consultar_sql("SELECT * FROM creditos")
     
     if not df_cred.empty:
         st.dataframe(df_cred, use_container_width=True)
-        
         st.markdown("### Registrar Pago de Crédito")
         pendientes = df_cred[df_cred['estado'] == 'Pendiente']
         
