@@ -108,7 +108,6 @@ def inicializar_base_datos():
         cursor.execute("INSERT OR REPLACE INTO usuarios VALUES (?, ?, ?, ?)", ("alex", "1717", "Administrador", "Alex Ticona"))
         conn.commit()
     
-    # Verificar esquemas de tablas secundarias
     cursor.execute("PRAGMA table_info(ventas)")
     cols_v = [col[1] for col in cursor.fetchall()]
     if len(cols_v) != 10:
@@ -130,6 +129,22 @@ def inicializar_base_datos():
     conn.close()
 
 inicializar_base_datos()
+
+# Lista oficial de unidades de medida solicitadas
+LISTA_UNIDADES_MEDIDA = [
+    "Unidad (PZA / UN)",
+    "Docena (DOC) / Centena / Millar",
+    "Pack / Paquete / Kit",
+    "Kilogramo (kg) / Gramo (g)",
+    "Libra (lb) / Onza (oz)",
+    "Tonelada (t)",
+    "Litro (L) / Mililitro (ml)",
+    "Galón (gal)",
+    "Metro (m) / Centímetro (cm)",
+    "Metro cuadrado (m²)",
+    "Caja / Bidón / Saco / Costal",
+    "Rollo / Bobina"
+]
 
 # ---------------------------------------------------------
 # CONTROL DE SESIÓN Y LOGIN
@@ -154,7 +169,7 @@ if not st.session_state['autenticado']:
     with tab_login:
         col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
         with col_l2:
-            st.info("💡 **Ejemplo de cliente de prueba:** Usuario `cliente1`, Contraseña `cli123` (o puedes registrar tu propia cuenta en la pestaña de al lado).")
+            st.info("💡 **Admin principal:** Usuario `alex`, Contraseña `1717`")
             with st.form("form_login"):
                 usuario_input = st.text_input("Usuario")
                 password_input = st.text_input("Contraseña", type="password")
@@ -189,7 +204,7 @@ if not st.session_state['autenticado']:
                             st.error("❌ El nombre de usuario ya está en uso. Elija otro.")
                         else:
                             ejecutar_sql("INSERT INTO usuarios VALUES (?, ?, ?, ?)", (nc_user, nc_pass, "Cliente", nc_nombre))
-                            st.success("✅ ¡Cuenta de cliente creada con éxito! Ya puedes iniciar sesión en la pestaña de Iniciar Sesión.")
+                            st.success("✅ ¡Cuenta de cliente creada con éxito! Ya puedes iniciar sesión.")
                     else:
                         st.error("⚠️ Por favor completa todos los campos.")
                         
@@ -212,11 +227,11 @@ if not st.session_state['autenticado']:
                                 st.error("❌ El usuario ya existe.")
                             else:
                                 ejecutar_sql("INSERT INTO usuarios VALUES (?, ?, ?, ?)", (ne_user, ne_pass, "Empleado", ne_nombre))
-                                st.success("✅ ¡Empleado registrado correctamente con permisos de venta e inventario!")
+                                st.success("✅ ¡Empleado registrado correctamente!")
                         else:
                             st.error("⚠️ Completa todos los campos.")
                     else:
-                        st.error("❌ Contraseña de Administrador incorrecta. No se autorizó la creación.")
+                        st.error("❌ Contraseña de Administrador incorrecta.")
                         
     with tab_invitado:
         col_i1, col_i2, col_i3 = st.columns([1, 2, 1])
@@ -381,17 +396,24 @@ elif menu == "📦 Inventario":
                         conn = sqlite3.connect(DB_NAME)
                         for _, row in df_csv.iterrows():
                             c_codigo = str(row.get('codigo', row.get('Código', row.iloc[0])))
-                            c_desc = str(row.get('descripcion', row.get('Descripción', row.get('Nombre', row.iloc[1]))))
-                            c_cant = float(row.get('cantidad', row.get('Cantidad', row.iloc[2] if len(row) > 2 else 1.0)))
-                            c_formato = str(row.get('formato', row.get('Formato', row.get('Unidad', row.iloc[3] if len(row) > 3 else 'Pza'))))
-                            c_costo = float(row.get('costo_compra', row.get('Costo', row.get('costo', row.iloc[4] if len(row) > 4 else 0.0))))
-                            c_precio = float(row.get('precio_venta', row.get('Precio', row.get('precio', row.iloc[5] if len(row) > 5 else 0.0))))
+                            nombre_val = str(row.get('nombre', row.get('Nombre', '')))
+                            desc_val = row.get('descripcion', row.get('Descripción', ''))
+                            
+                            if pd.isna(desc_val) or str(desc_val).strip() == "" or str(desc_val).lower() == "nan":
+                                c_desc = nombre_val if nombre_val and nombre_val.lower() != "nan" else c_codigo
+                            else:
+                                c_desc = str(desc_val)
+                                
+                            c_cant = float(row.get('cantidad', row.get('Cantidad', row.iloc[3] if len(row) > 3 else 0.0)))
+                            c_formato = str(row.get('formato', row.get('Formato', row.iloc[4] if len(row) > 4 else 'Unidad (PZA / UN)')))
+                            c_costo = float(row.get('costo de compra', row.get('costo_compra', row.get('Costo', 0.0))))
+                            c_precio = float(row.get('precio de venta', row.get('precio_venta', row.get('Precio', 0.0))))
 
                             conn.execute('INSERT OR REPLACE INTO productos VALUES (?, ?, ?, ?, ?, ?)', 
                                          (c_codigo, c_desc, c_cant, c_formato, c_costo, c_precio))
                         conn.commit()
                         conn.close()
-                        st.success("✅ ¡Inventario importado correctamente!")
+                        st.success("✅ ¡Inventario importado y sincronizado correctamente con el CSV!")
                         st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error al procesar el archivo CSV: {e}")
@@ -427,9 +449,9 @@ elif menu == "📦 Inventario":
                 ndesc = st.text_input("Descripción / Nombre")
                 ncant = st.number_input("Cantidad Inicial", min_value=0.0, value=1.0)
             with cp2:
-                nform = st.text_input("Unidad / Formato (Ej: Pza, Rollo, Kg, Litro)", value="Pza")
-                ncost = st.number_input("Costo de Compra (Bs.)", min_value=0.0, value=10.0)
-                nprec = st.number_input("Precio de Venta (Bs.)", min_value=0.0, value=15.0)
+                nform = st.selectbox("Unidad de Medida", LISTA_UNIDADES_MEDIDA)
+                ncost = st.number_input("Costo de Compra (Bs.)", min_value=0.0, value=0.0)
+                nprec = st.number_input("Precio de Venta (Bs.)", min_value=0.0, value=10.0)
                 
             bc1, bc2 = st.columns(2)
             with bc1: guardar_p = st.form_submit_button("✅ Completar Registro", use_container_width=True)
@@ -455,7 +477,18 @@ elif menu == "📦 Inventario":
 
     if not df_inv_filtrado.empty:
         with st.form("form_edit_inv"):
-            df_editado = st.data_editor(df_inv_filtrado, use_container_width=True)
+            df_editado = st.data_editor(
+                df_inv_filtrado, 
+                use_container_width=True,
+                column_config={
+                    "formato": st.column_config.SelectboxColumn(
+                        "Unidad de Medida",
+                        help="Selecciona la unidad de medida",
+                        options=LISTA_UNIDADES_MEDIDA,
+                        required=True
+                    )
+                }
+            )
             be1, be2 = st.columns(2)
             with be1: guardar_inv = st.form_submit_button("✅ Guardar Cambios", use_container_width=True)
             with be2: cancelar_inv = st.form_submit_button("❌ Cancelar", use_container_width=True)
