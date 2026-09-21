@@ -118,7 +118,9 @@ def inicializar_base_datos():
 
 inicializar_base_datos()
 
-# SIDEBAR: Logo y Menú
+# ---------------------------------------------------------
+# SIDEBAR: Logo, Selector de Roles y Menú Dinámico
+# ---------------------------------------------------------
 logo_paths = ["logo.png", "p-jpg-Google-Drive-09-16-2026_10_06_PM_2.png", "p-jpg-Google-Drive-09-16-2026_10_06_PM.png"]
 logo_encontrado = False
 for lp in logo_paths:
@@ -134,19 +136,32 @@ st.sidebar.markdown("<h1 style='text-align: center; color: #38bdf8; font-size: 1
 st.sidebar.markdown("<p style='text-align: center; color: #94a3b8; font-size: 0.85rem; margin-bottom: 20px;'>Sistema de Gestión Comercial</p>", unsafe_allow_html=True)
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("<p style='font-size: 1.1rem; font-weight: bold; color: #f8fafc;'>🔐 Control de Acceso (Rol)</p>", unsafe_allow_html=True)
+rol_usuario = st.sidebar.selectbox("Seleccionar Perfil:", ["Administrador", "Empleado", "Cliente"])
+
+st.sidebar.markdown("---")
 st.sidebar.markdown("<p style='font-size: 1.1rem; font-weight: bold; color: #f8fafc;'>Menú Principal</p>", unsafe_allow_html=True)
 
-menu = st.sidebar.radio("", [
-    "🛒 Ventas (POS)",
-    "📦 Inventario",
-    "👥 Empleados",
-    "💸 Gastos",
-    "📊 Estadísticas",
-    "📒 Créditos"
-], label_visibility="collapsed")
+# Menú dinámico basado estrictamente en el rol seleccionado
+if rol_usuario == "Administrador":
+    menu = st.sidebar.radio("", [
+        "🛒 Ventas (POS)",
+        "📦 Inventario",
+        "👥 Empleados",
+        "💸 Gastos",
+        "📊 Estadísticas",
+        "📒 Créditos"
+    ], label_visibility="collapsed")
+elif rol_usuario == "Empleado":
+    menu = st.sidebar.radio("", [
+        "🛒 Ventas (POS)",
+        "📦 Inventario (Consulta)"
+    ], label_visibility="collapsed")
+else: # Cliente
+    menu = "🛒 Catálogo Virtual (Cliente)"
 
 # ---------------------------------------------------------
-# 1. PUNTO DE VENTA (POS)
+# 1. PUNTO DE VENTA (POS) - Administrador y Empleado
 # ---------------------------------------------------------
 if menu == "🛒 Ventas (POS)":
     st.title("🛒 Punto de Venta")
@@ -154,9 +169,10 @@ if menu == "🛒 Ventas (POS)":
     df_emp = consultar_sql("SELECT * FROM empleados")
     
     if df_inv.empty:
-        st.warning("⚠️ No hay productos registrados. Ve al módulo de Inventario para agregar.")
+        st.warning("⚠️ No hay productos registrados en el inventario.")
     else:
         col1, col2 = st.columns([2, 1])
+        
         with col1:
             st.subheader("Registrar Venta")
             empleados_lista = df_emp['nombre'].tolist() if not df_emp.empty else ["General"]
@@ -209,22 +225,24 @@ if menu == "🛒 Ventas (POS)":
             st.metric("Ventas Hoy", f"Bs. {df_hoy['total'].sum() if not df_hoy.empty else 0.0:,.2f}")
             st.metric("Transacciones", f"{len(df_hoy)}")
             
-            st.markdown("---")
-            st.subheader("Eliminar Venta")
-            df_todas_v = consultar_sql("SELECT id_venta, fecha, total, cliente FROM ventas ORDER BY fecha DESC LIMIT 20")
-            if not df_todas_v.empty:
-                v_sel = st.selectbox("Seleccionar Venta a Anular:", df_todas_v['id_venta'] + " - " + df_todas_v['cliente'] + " (Bs. " + df_todas_v['total'].astype(str) + ")")
-                if st.button("🗑️ Eliminar Venta Seleccionada"):
-                    vid = v_sel.split(" - ")[0]
-                    ejecutar_sql("DELETE FROM ventas WHERE id_venta = ?", (vid,))
-                    st.success("✅ Venta eliminada correctamente.")
-                    st.rerun()
+            # Solo Administrador puede eliminar ventas
+            if rol_usuario == "Administrador":
+                st.markdown("---")
+                st.subheader("Eliminar Venta")
+                df_todas_v = consultar_sql("SELECT id_venta, fecha, total, cliente FROM ventas ORDER BY fecha DESC LIMIT 20")
+                if not df_todas_v.empty:
+                    v_sel = st.selectbox("Seleccionar Venta a Anular:", df_todas_v['id_venta'] + " - " + df_todas_v['cliente'] + " (Bs. " + df_todas_v['total'].astype(str) + ")")
+                    if st.button("🗑️ Eliminar Venta Seleccionada"):
+                        vid = v_sel.split(" - ")[0]
+                        ejecutar_sql("DELETE FROM ventas WHERE id_venta = ?", (vid,))
+                        st.success("✅ Venta eliminada correctamente.")
+                        st.rerun()
 
 # ---------------------------------------------------------
-# 2. INVENTARIO (Con Carga CSV Inteligente y Descarga)
+# 2. INVENTARIO (Administrador: Edición y Carga/Descarga | Empleado: Solo Ver sin Precios)
 # ---------------------------------------------------------
 elif menu == "📦 Inventario":
-    st.title("📦 Gestión de Inventario")
+    st.title("📦 Gestión de Inventario (Administrador)")
     df_inv = consultar_sql("SELECT * FROM productos")
     
     with st.expander("📂 Importar o Exportar Inventario Masivo"):
@@ -239,7 +257,6 @@ elif menu == "📦 Inventario":
                     if st.button("📥 Guardar / Reemplazar con CSV"):
                         conn = sqlite3.connect(DB_NAME)
                         for _, row in df_csv.iterrows():
-                            # Detección flexible de columnas para evitar errores
                             c_codigo = str(row.get('codigo', row.get('Código', row.iloc[0])))
                             c_desc = str(row.get('descripcion', row.get('Descripción', row.get('Nombre', row.iloc[1]))))
                             c_cant = float(row.get('cantidad', row.get('Cantidad', row.iloc[2] if len(row) > 2 else 1.0)))
@@ -330,8 +347,19 @@ elif menu == "📦 Inventario":
                 st.success("✅ Inventario actualizado.")
                 st.rerun()
 
+elif menu == "📦 Inventario (Consulta)":
+    st.title("📦 Consulta de Inventario (Modo Empleado)")
+    st.info("ℹ️ Como empleado, puedes consultar el stock y características de los artículos, pero no tienes permisos de modificación ni acceso a los precios de venta.")
+    
+    df_inv = consultar_sql("SELECT codigo, descripcion, cantidad, formato FROM productos")
+    busqueda_emp = st.text_input("🔍 Buscar producto:")
+    if busqueda_emp:
+        df_inv = df_inv[df_inv['codigo'].astype(str).str.contains(busqueda_emp, case=False, na=False) | df_inv['descripcion'].str.contains(busqueda_emp, case=False, na=False)]
+        
+    st.dataframe(df_inv, use_container_width=True)
+
 # ---------------------------------------------------------
-# 3. EMPLEADOS
+# 3. EMPLEADOS (Solo Administrador)
 # ---------------------------------------------------------
 elif menu == "👥 Empleados":
     st.title("👥 Gestión de Empleados")
@@ -362,7 +390,7 @@ elif menu == "👥 Empleados":
     st.dataframe(consultar_sql("SELECT * FROM empleados"), use_container_width=True)
 
 # ---------------------------------------------------------
-# 4. GASTOS
+# 4. GASTOS (Solo Administrador)
 # ---------------------------------------------------------
 elif menu == "💸 Gastos":
     st.title("💸 Registro de Gastos")
@@ -402,7 +430,7 @@ elif menu == "💸 Gastos":
     st.dataframe(consultar_sql("SELECT * FROM gastos"), use_container_width=True)
 
 # ---------------------------------------------------------
-# 5. ESTADÍSTICAS
+# 5. ESTADÍSTICAS (Solo Administrador)
 # ---------------------------------------------------------
 elif menu == "📊 Estadísticas":
     st.title("📊 Estadísticas y Balance Financiero")
@@ -419,7 +447,7 @@ elif menu == "📊 Estadísticas":
     with b3: st.metric("Utilidad Neta", f"Bs. {utilidad:,.2f}")
 
 # ---------------------------------------------------------
-# 6. CRÉDITOS
+# 6. CRÉDITOS (Solo Administrador)
 # ---------------------------------------------------------
 elif menu == "📒 Créditos":
     st.title("📒 Cuentas por Cobrar (Créditos / Fiados)")
@@ -449,3 +477,32 @@ elif menu == "📒 Créditos":
             st.success("🎉 ¡No hay créditos pendientes de cobro!")
     else:
         st.info("No hay registros de créditos.")
+
+# ---------------------------------------------------------
+# 7. CATÁLOGO VIRTUAL (Perfil Cliente)
+# ---------------------------------------------------------
+elif menu == "🛒 Catálogo Virtual (Cliente)":
+    st.title("🛒 Catálogo Virtual - MEGA TRAM")
+    st.markdown("Bienvenido a nuestro catálogo en línea. Aquí puedes consultar los productos disponibles y sus precios de venta.")
+    
+    df_client_inv = consultar_sql("SELECT descripcion, formato, precio_venta, cantidad FROM productos")
+    
+    busq_c = st.text_input("🔍 Buscar productos en el catálogo...")
+    if busq_c:
+        df_client_inv = df_client_inv[df_client_inv['descripcion'].str.contains(busq_c, case=False, na=False)]
+        
+    if df_client_inv.empty:
+        st.info("No hay productos disponibles en el catálogo en este momento.")
+    else:
+        cols = st.columns(3)
+        for idx, row in df_client_inv.reset_index().iterrows():
+            with cols[idx % 3]:
+                disponibilidad = "🟢 Disponible" if row['cantidad'] > 0 else "🔴 Agotado"
+                st.container(border=True).markdown(f"""
+                <div style="text-align: center;">
+                    <h3>{row['descripcion']}</h3>
+                    <p style="color: gray; font-size: 13px;">Unidad: {row['formato']}</p>
+                    <h2 style="color: #2563eb;">Bs. {row['precio_venta']:,.2f}</h2>
+                    <p style="font-size: 12px; font-weight: bold;">{disponibilidad}</p>
+                </div>
+                """, unsafe_allow_html=True)
