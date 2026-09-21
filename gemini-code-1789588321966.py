@@ -12,34 +12,73 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS avanzados para un diseño totalmente cohesionado con el tema del logo
+# Estilos CSS avanzados y modernos para botones, contenedores y diseño general
 st.markdown("""
     <style>
+    /* Estilo general de la barra lateral */
     [data-testid="stSidebar"] {
-        background-color: #0f172a;
+        background-color: #0b132b;
         padding-top: 1rem;
+        border-right: 1px solid #1c2541;
     }
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
-        color: #f8fafc !important;
+        color: #ffffff !important;
     }
+    
+    /* Radio buttons del menú con diseño de botones modernos */
     .stRadio label {
-        font-size: 1.15rem !important;
+        font-size: 1.1rem !important;
         font-weight: 600 !important;
-        color: #f1f5f9 !important;
-        padding: 6px 0px;
+        color: #e0fbfc !important;
+        padding: 8px 12px;
+        border-radius: 8px;
+        transition: all 0.3s ease;
     }
+    .stRadio label:hover {
+        background-color: #1d2d44;
+        color: #38bdf8 !important;
+    }
+
+    /* Tarjetas de Métricas estilizadas */
     .stMetric {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-        border: 1px solid #334155;
+        background: linear-gradient(135deg, #1b263b 0%, #0d1b2a 100%) !important;
+        padding: 22px;
+        border-radius: 16px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+        border: 1px solid #415a77;
     }
-    .stMetric label { color: #94a3b8 !important; font-weight: 600 !important; }
-    .stMetric div[data-testid="stMetricValue"] { color: #f8fafc !important; font-size: 1.8rem !important; }
+    .stMetric label { color: #8d99ae !important; font-weight: 600 !important; font-size: 0.95rem !important; }
+    .stMetric div[data-testid="stMetricValue"] { color: #e0fbfc !important; font-size: 2rem !important; font-weight: bold; }
+
+    /* Botones de Streamlit personalizados */
+    .stButton>button, .stFormSubmitButton>button {
+        background: linear-gradient(135deg, #3a86ff 0%, #2563eb 100%) !important;
+        color: white !important;
+        font-weight: 600 !important;
+        border-radius: 10px !important;
+        padding: 0.6rem 1.2rem !important;
+        border: none !important;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        transition: all 0.3s ease;
+    }
+    .stButton>button:hover, .stFormSubmitButton>button:hover {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.5);
+        transform: translateY(-1px);
+    }
+
+    /* Encabezados generales */
     h1, h2, h3 {
         color: #0f172a;
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-weight: 700;
+    }
+    
+    /* Contenedores de expansores y formularios */
+    .streamlit-expanderHeader {
+        background-color: #f8fafc;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -74,7 +113,6 @@ def inicializar_base_datos():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    # 1. Verificar y corregir tabla ventas
     cursor.execute("PRAGMA table_info(ventas)")
     cols_v = [col[1] for col in cursor.fetchall()]
     if len(cols_v) != 10:
@@ -85,7 +123,6 @@ def inicializar_base_datos():
         )''')
         conn.commit()
         
-    # 2. Verificar y corregir tabla creditos
     cursor.execute("PRAGMA table_info(creditos)")
     cols_c = [col[1] for col in cursor.fetchall()]
     if "total" not in cols_c or len(cols_c) != 5:
@@ -113,7 +150,7 @@ for lp in logo_paths:
 if not logo_encontrado:
     st.sidebar.warning("⚠️ Sube tu logo como 'logo.png' en el directorio del proyecto.")
 
-st.sidebar.markdown("<h1 style='text-align: center; color: #38bdf8; font-size: 1.8rem; margin-top: 0px;'>⚡ MEGA TRAM</h1>", unsafe_allow_html=True)
+st.sidebar.markdown("<h1 style='text-align: center; color: #38bdf8; font-size: 1.8rem; margin-top: 5px;'>⚡ MEGA TRAM</h1>", unsafe_allow_html=True)
 st.sidebar.markdown("<p style='text-align: center; color: #94a3b8; font-size: 0.85rem; margin-bottom: 20px;'>Sistema de Gestión Comercial</p>", unsafe_allow_html=True)
 
 st.sidebar.markdown("---")
@@ -165,7 +202,7 @@ if menu == "🛒 Ventas (POS)":
                 metodo = st.selectbox("Método de Pago", ["Efectivo", "QR / Transferencia", "Tarjeta", "Crédito / Fiado"])
                 
                 subtotal = cant_vender * precio_vender
-                st.markdown(f"### Total a Pagar: <span style='color: #38bdf8;'>Bs. {subtotal:,.2f}</span>", unsafe_allow_html=True)
+                st.markdown(f"### Total a Pagar: <span style='color: #2563eb;'>Bs. {subtotal:,.2f}</span>", unsafe_allow_html=True)
                 
                 b_col1, b_col2 = st.columns(2)
                 with b_col1: btn_completar = st.form_submit_button("✅ Completar Venta", use_container_width=True)
@@ -211,31 +248,51 @@ if menu == "🛒 Ventas (POS)":
                     st.rerun()
 
 # ---------------------------------------------------------
-# 2. INVENTARIO (Incluyendo carga de CSV)
+# 2. INVENTARIO (Carga CSV + Descarga CSV + Edición)
 # ---------------------------------------------------------
 elif menu == "📦 Inventario":
     st.title("📦 Gestión de Inventario")
     
-    # Sección para Cargar CSV
-    with st.expander("📂 Importar Inventario desde Archivo CSV"):
-        archivo_csv = st.file_uploader("Sube tu archivo CSV con columnas: codigo, descripcion, cantidad, formato, costo_compra, precio_venta", type=["csv"])
-        if archivo_csv is not None:
-            try:
-                df_csv = pd.read_csv(archivo_csv)
-                st.write("Vista previa de los datos subidos:", df_csv.head())
-                if st.button("📥 Guardar / Reemplazar Inventario con CSV"):
-                    conn = sqlite3.connect(DB_NAME)
-                    for _, row in df_csv.iterrows():
-                        conn.execute('INSERT OR REPLACE INTO productos VALUES (?, ?, ?, ?, ?, ?)', 
-                                     (str(row['codigo']), str(row['descripcion']), float(row['cantidad']), str(row['formato']), float(row['costo_compra']), float(row['precio_venta'])))
-                    conn.commit()
-                    conn.close()
-                    st.success("✅ ¡Inventario importado correctamente desde el CSV!")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error al procesar el archivo CSV: {e}")
-
     df_inv = consultar_sql("SELECT * FROM productos")
+    
+    # Sección para Cargar e Importar CSV
+    with st.expander("📂 Importar o Exportar Inventario Masivo"):
+        col_sub, col_desc = st.columns(2)
+        
+        with col_sub:
+            st.markdown("#### Subir Archivo CSV")
+            archivo_csv = st.file_uploader("Sube tu CSV (codigo, descripcion, cantidad, formato, costo_compra, precio_venta)", type=["csv"])
+            if archivo_csv is not None:
+                try:
+                    df_csv = pd.read_csv(archivo_csv)
+                    st.write("Vista previa:", df_csv.head(3))
+                    if st.button("📥 Guardar / Reemplazar con CSV"):
+                        conn = sqlite3.connect(DB_NAME)
+                        for _, row in df_csv.iterrows():
+                            conn.execute('INSERT OR REPLACE INTO productos VALUES (?, ?, ?, ?, ?, ?)', 
+                                         (str(row['codigo']), str(row['descripcion']), float(row['cantidad']), str(row['formato']), float(row['costo_compra']), float(row['precio_venta'])))
+                        conn.commit()
+                        conn.close()
+                        st.success("✅ ¡Inventario importado correctamente!")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al procesar el archivo CSV: {e}")
+                    
+        with col_desc:
+            st.markdown("#### Descargar Inventario Actual")
+            st.write("Descarga una copia de seguridad de tu inventario en formato CSV para editarlo o respaldarlo.")
+            if not df_inv.empty:
+                csv_data = df_inv.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="⬇️ Descargar Inventario en CSV",
+                    data=csv_data,
+                    file_name=f"inventario_megatram_{datetime.date.today()}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            else:
+                st.info("No hay productos para descargar.")
+
     total_refs = len(df_inv)
     costo_inv = (df_inv['cantidad'] * df_inv['costo_compra']).sum() if not df_inv.empty else 0.0
     
