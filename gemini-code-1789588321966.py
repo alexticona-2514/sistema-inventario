@@ -169,7 +169,7 @@ if not st.session_state['autenticado']:
     with tab_login:
         col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
         with col_l2:
-            st.info("💡 **Admin principal:** Usuario `alex`, Contraseña `1717`")
+            st.info("💡 **")
             with st.form("form_login"):
                 usuario_input = st.text_input("Usuario")
                 password_input = st.text_input("Contraseña", type="password")
