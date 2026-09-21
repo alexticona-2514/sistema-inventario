@@ -100,19 +100,15 @@ def inicializar_base_datos():
         id_pedido TEXT PRIMARY KEY, cliente TEXT, fecha TEXT, detalle TEXT, total REAL, estado TEXT
     )''')
     
-    # Insertar usuarios por defecto si no existen
+    # Asegurar que el Administrador principal (alex / 1717) siempre exista
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM usuarios")
-    if cursor.fetchone()[0] == 0:
-        usuarios_default = [
-            ("admin", "admin123", "Administrador", "Gerente Principal"),
-            ("empleado", "emp123", "Empleado", "Personal de Ventas"),
-            ("cliente1", "cli123", "Cliente", "Juan Cliente")
-        ]
-        cursor.executemany("INSERT INTO usuarios VALUES (?, ?, ?, ?)", usuarios_default)
+    cursor.execute("SELECT * FROM usuarios WHERE usuario = 'alex'")
+    if not cursor.fetchone():
+        cursor.execute("INSERT OR REPLACE INTO usuarios VALUES (?, ?, ?, ?)", ("alex", "1717", "Administrador", "Alex Ticona"))
         conn.commit()
     
+    # Verificar esquemas de tablas secundarias
     cursor.execute("PRAGMA table_info(ventas)")
     cols_v = [col[1] for col in cursor.fetchall()]
     if len(cols_v) != 10:
@@ -148,38 +144,93 @@ if not st.session_state['autenticado']:
     st.markdown("<h1 style='text-align: center; color: #0f172a;'>⚡ MEGA TRAM - Sistema Comercial</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #64748b;'>Control de Acceso e Inicio de Sesión</h3>", unsafe_allow_html=True)
     
-    col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
-    with col_l2:
-        st.info("💡 **Credenciales de prueba:**\n- Admin: `admin` / `admin123`\n- Empleado: `empleado` / `emp123`\n- Cliente: `cliente1` / `cli123`")
-        
-        with st.form("form_login"):
-            usuario_input = st.text_input("Usuario")
-            password_input = st.text_input("Contraseña", type="password")
-            
-            b_ingresar = st.form_submit_button("🔐 Iniciar Sesión", use_container_width=True)
-            
-            if b_ingresar:
-                df_u = consultar_sql("SELECT * FROM usuarios WHERE usuario = ? AND password = ?", (usuario_input, password_input))
-                if not df_u.empty:
-                    st.session_state['autenticado'] = True
-                    st.session_state['usuario'] = df_u.iloc[0]['usuario']
-                    st.session_state['rol'] = df_u.iloc[0]['rol']
-                    st.session_state['nombre_completo'] = df_u.iloc[0]['nombre']
-                    st.success("✅ ¡Acceso exitoso!")
-                    st.rerun()
-                else:
-                    st.error("❌ Usuario o contraseña incorrectos.")
-                    
-        st.markdown("---")
-        st.markdown("<h4 style='text-align: center;'>¿Eres cliente y no tienes cuenta?</h4>", unsafe_allow_html=True)
-        if st.button("🛒 Entrar como Cliente sin cuenta (Catálogo Invitado)", use_container_width=True):
-            st.session_state['autenticado'] = True
-            st.session_state['usuario'] = "invitado"
-            st.session_state['rol'] = "ClienteInvitado"
-            st.session_state['nombre_completo'] = "Cliente Invitado"
-            st.rerun()
-            
-    st.stop() # Detiene la ejecución hasta que inicie sesión
+    tab_login, tab_reg_cliente, tab_reg_empleado, tab_invitado = st.tabs([
+        "🔐 Iniciar Sesión", 
+        "👤 Crear Cuenta de Cliente", 
+        "👔 Registrar Empleado (Admin)", 
+        "🌐 Entrar como Invitado"
+    ])
+    
+    with tab_login:
+        col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
+        with col_l2:
+            st.info("💡 **Ejemplo de cliente de prueba:** Usuario `cliente1`, Contraseña `cli123` (o puedes registrar tu propia cuenta en la pestaña de al lado).")
+            with st.form("form_login"):
+                usuario_input = st.text_input("Usuario")
+                password_input = st.text_input("Contraseña", type="password")
+                b_ingresar = st.form_submit_button("🔐 Ingresar al Sistema", use_container_width=True)
+                
+                if b_ingresar:
+                    df_u = consultar_sql("SELECT * FROM usuarios WHERE usuario = ? AND password = ?", (usuario_input, password_input))
+                    if not df_u.empty:
+                        st.session_state['autenticado'] = True
+                        st.session_state['usuario'] = df_u.iloc[0]['usuario']
+                        st.session_state['rol'] = df_u.iloc[0]['rol']
+                        st.session_state['nombre_completo'] = df_u.iloc[0]['nombre']
+                        st.success("✅ ¡Acceso exitoso!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Usuario o contraseña incorrectos.")
+                        
+    with tab_reg_cliente:
+        col_c1, col_c2, col_c3 = st.columns([1, 2, 1])
+        with col_c2:
+            st.markdown("### Registro de Nueva Cuenta de Cliente")
+            with st.form("form_nuevo_cliente"):
+                nc_user = st.text_input("Elija su Nombre de Usuario")
+                nc_pass = st.text_input("Elija su Contraseña", type="password")
+                nc_nombre = st.text_input("Su Nombre y Apellido Completo")
+                b_reg_cli = st.form_submit_button("✅ Registrar Cuenta de Cliente", use_container_width=True)
+                
+                if b_reg_cli:
+                    if nc_user and nc_pass and nc_nombre:
+                        existe_u = consultar_sql("SELECT * FROM usuarios WHERE usuario = ?", (nc_user,))
+                        if not existe_u.empty:
+                            st.error("❌ El nombre de usuario ya está en uso. Elija otro.")
+                        else:
+                            ejecutar_sql("INSERT INTO usuarios VALUES (?, ?, ?, ?)", (nc_user, nc_pass, "Cliente", nc_nombre))
+                            st.success("✅ ¡Cuenta de cliente creada con éxito! Ya puedes iniciar sesión en la pestaña de Iniciar Sesión.")
+                    else:
+                        st.error("⚠️ Por favor completa todos los campos.")
+                        
+    with tab_reg_empleado:
+        col_e1, col_e2, col_e3 = st.columns([1, 2, 1])
+        with col_e2:
+            st.markdown("### Registro de Empleado (Requiere autorización)")
+            with st.form("form_nuevo_empleado"):
+                ne_user = st.text_input("Usuario del Empleado")
+                ne_pass = st.text_input("Contraseña del Empleado", type="password")
+                ne_nombre = st.text_input("Nombre Completo del Empleado")
+                pass_admin_autorizacion = st.text_input("🔒 Contraseña del Administrador (Alex)", type="password")
+                b_reg_emp = st.form_submit_button("✅ Registrar Empleado", use_container_width=True)
+                
+                if b_reg_emp:
+                    if pass_admin_autorizacion == "1717":
+                        if ne_user and ne_pass and ne_nombre:
+                            existe_eu = consultar_sql("SELECT * FROM usuarios WHERE usuario = ?", (ne_user,))
+                            if not existe_eu.empty:
+                                st.error("❌ El usuario ya existe.")
+                            else:
+                                ejecutar_sql("INSERT INTO usuarios VALUES (?, ?, ?, ?)", (ne_user, ne_pass, "Empleado", ne_nombre))
+                                st.success("✅ ¡Empleado registrado correctamente con permisos de venta e inventario!")
+                        else:
+                            st.error("⚠️ Completa todos los campos.")
+                    else:
+                        st.error("❌ Contraseña de Administrador incorrecta. No se autorizó la creación.")
+                        
+    with tab_invitado:
+        col_i1, col_i2, col_i3 = st.columns([1, 2, 1])
+        with col_i2:
+            st.markdown("### Explorar como Invitado")
+            st.write("Puedes navegar libremente por el catálogo virtual de productos.")
+            if st.button("🌐 Entrar como Invitado", use_container_width=True):
+                st.session_state['autenticado'] = True
+                st.session_state['usuario'] = "invitado"
+                st.session_state['rol'] = "ClienteInvitado"
+                st.session_state['nombre_completo'] = "Visitante Invitado"
+                st.rerun()
+                
+    st.stop()
 
 # ---------------------------------------------------------
 # SIDEBAR: Logo, Información de Sesión y Menú Dinámico
@@ -216,6 +267,7 @@ if rol_usuario == "Administrador":
         "🛒 Ventas (POS)",
         "📦 Inventario",
         "👥 Empleados",
+        "👥 Administración de Usuarios",
         "💸 Gastos",
         "📊 Estadísticas",
         "📒 Créditos"
@@ -234,7 +286,7 @@ else: # ClienteInvitado
     menu = "🛒 Catálogo Virtual"
 
 # ---------------------------------------------------------
-# 1. PUNTO DE VENTA (POS) - Administrador y Empleado
+# 1. PUNTO DE VENTA (POS)
 # ---------------------------------------------------------
 if menu == "🛒 Ventas (POS)":
     st.title("🛒 Punto de Venta")
@@ -245,7 +297,6 @@ if menu == "🛒 Ventas (POS)":
         st.warning("⚠️ No hay productos registrados en el inventario.")
     else:
         col1, col2 = st.columns([2, 1])
-        
         with col1:
             st.subheader("Registrar Venta")
             empleados_lista = df_emp['nombre'].tolist() if not df_emp.empty else ["General"]
@@ -462,7 +513,34 @@ elif menu == "👥 Empleados":
     st.dataframe(consultar_sql("SELECT * FROM empleados"), use_container_width=True)
 
 # ---------------------------------------------------------
-# 4. GASTOS (Solo Administrador)
+# 4. ADMINISTRACIÓN DE USUARIOS (Exclusivo Administrador)
+# ---------------------------------------------------------
+elif menu == "👥 Administración de Usuarios":
+    st.title("👥 Módulo de Gestión de Usuarios")
+    st.info("Administra todas las cuentas de usuario registradas en el sistema (Administradores, Empleados y Clientes).")
+    
+    df_usuarios = consultar_sql("SELECT usuario, rol, nombre FROM usuarios")
+    
+    if not df_usuarios.empty:
+        st.subheader("Cuentas Registradas")
+        st.dataframe(df_usuarios, use_container_width=True)
+        
+        st.markdown("---")
+        st.subheader("Eliminar o Gestionar Usuario")
+        user_a_borrar = st.selectbox("Seleccionar usuario a eliminar:", df_usuarios['usuario'])
+        
+        if user_a_borrar == "alex":
+            st.warning("⚠️ No puedes eliminar al administrador principal del sistema.")
+        else:
+            if st.button("🗑️ Eliminar Usuario Seleccionado"):
+                ejecutar_sql("DELETE FROM usuarios WHERE usuario = ?", (user_a_borrar,))
+                st.success(f"✅ El usuario '{user_a_borrar}' ha sido eliminado correctamente.")
+                st.rerun()
+    else:
+        st.info("No hay usuarios registrados.")
+
+# ---------------------------------------------------------
+# 5. GASTOS (Solo Administrador)
 # ---------------------------------------------------------
 elif menu == "💸 Gastos":
     st.title("💸 Registro de Gastos")
@@ -502,7 +580,7 @@ elif menu == "💸 Gastos":
     st.dataframe(consultar_sql("SELECT * FROM gastos"), use_container_width=True)
 
 # ---------------------------------------------------------
-# 5. ESTADÍSTICAS (Solo Administrador)
+# 6. ESTADÍSTICAS (Solo Administrador)
 # ---------------------------------------------------------
 elif menu == "📊 Estadísticas":
     st.title("📊 Estadísticas y Balance Financiero")
@@ -519,7 +597,7 @@ elif menu == "📊 Estadísticas":
     with b3: st.metric("Utilidad Neta", f"Bs. {utilidad:,.2f}")
 
 # ---------------------------------------------------------
-# 6. CRÉDITOS (Solo Administrador)
+# 7. CRÉDITOS (Solo Administrador)
 # ---------------------------------------------------------
 elif menu == "📒 Créditos":
     st.title("📒 Cuentas por Cobrar (Créditos / Fiados)")
@@ -551,14 +629,14 @@ elif menu == "📒 Créditos":
         st.info("No hay registros de créditos.")
 
 # ---------------------------------------------------------
-# 7. CATÁLOGO VIRTUAL Y PEDIDOS (Clientes / Invitados)
+# 8. CATÁLOGO VIRTUAL Y PEDIDOS (Clientes / Invitados)
 # ---------------------------------------------------------
 elif menu == "🛒 Catálogo Virtual":
     st.title("🛒 Catálogo Virtual - MEGA TRAM")
     if rol_usuario == "Cliente":
         st.success(f"👋 ¡Hola, {st.session_state['nombre_completo']}! Puedes realizar pedidos directamente desde el catálogo.")
     else:
-        st.info("🌐 Estás navegando como Invitado. Inicia sesión con tu cuenta de cliente si deseas registrar y guardar tus pedidos.")
+        st.info("🌐 Estás navegando como Invitado. Inicia sesión o crea una cuenta si deseas registrar y guardar tus pedidos.")
         
     df_client_inv = consultar_sql("SELECT descripcion, formato, precio_venta, cantidad FROM productos")
     
@@ -584,7 +662,6 @@ elif menu == "🛒 Catálogo Virtual":
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Si es un cliente con sesión iniciada, permitirle hacer un pedido rápido
                     if rol_usuario == "Cliente":
                         cant_pedir = st.number_input(f"Cantidad a pedir ({row['descripcion']})", min_value=1.0, value=1.0, key=f"cant_{idx}")
                         if st.button(f"🛍️ Solicitar Pedido", key=f"btn_ped_{idx}", use_container_width=True):
